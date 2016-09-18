@@ -1,0 +1,3 @@
+build3/gmake/*
+bin/*
+Extras/lib/libBulletXmlWorldImporter_gmake_x64_release.a
