@@ -5,6 +5,8 @@
 #include "Bullet3Common/b3AlignedObjectArray.h"
 #include "../CommonInterfaces/CommonRenderInterface.h"
 //#include "../CommonInterfaces/CommonExampleInterface.h"
+#include "../SharedMemory/PhysicsServerCommandProcessor.h"
+
 #include "../CommonInterfaces/CommonGUIHelperInterface.h"
 #include "../SharedMemory/PhysicsServerSharedMemory.h"
 #include "../SharedMemory/PhysicsServerSharedMemory.h"
@@ -400,6 +402,21 @@ public:
 	virtual void drawText3D( const char* txt, float posX, float posZY, float posZ, float size)
 	{
 	}
+
+		virtual int		addUserDebugText3D( const char* txt, const double positionXYZ[3], const double	textColorRGB[3], double size, double lifeTime)
+	{
+		return -1;
+	}
+	virtual int		addUserDebugLine(const double	debugLineFromXYZ[3], const double	debugLineToXYZ[3], const double	debugLineColorRGB[3], double lineWidth, double lifeTime )
+	{
+		return -1;
+	}
+	virtual void	removeUserDebugItem( int debugItemUniqueId)
+	{
+	}
+	virtual void	removeAllUserDebugItems( )
+	{
+	}
 };
 
 
@@ -480,12 +497,30 @@ int b3GetStatusInverseKinematicsJointPositions(b3SharedMemoryStatusHandle status
 */
 bool b3RobotSimAPI::calculateInverseKinematics(const struct b3RobotSimInverseKinematicArgs& args, struct b3RobotSimInverseKinematicsResults& results)
 {
+	btAssert(args.m_endEffectorLinkIndex>=0);
+	btAssert(args.m_bodyUniqueId>=0);
+	
 
-	b3SharedMemoryCommandHandle command = b3CalculateInverseKinematicsCommandInit(m_data->m_physicsClient,args.m_bodyUniqueId,
-                                                                                  args.m_endEffectorTargetPosition);
+	b3SharedMemoryCommandHandle command = b3CalculateInverseKinematicsCommandInit(m_data->m_physicsClient,args.m_bodyUniqueId);
+	if ((args.m_flags & B3_HAS_IK_TARGET_ORIENTATION) && (args.m_flags & B3_HAS_NULL_SPACE_VELOCITY))
+    {
+        b3CalculateInverseKinematicsPosOrnWithNullSpaceVel(command, args.m_numDegreeOfFreedom, args.m_endEffectorLinkIndex, args.m_endEffectorTargetPosition, args.m_endEffectorTargetOrientation, &args.m_lowerLimits[0], &args.m_upperLimits[0], &args.m_jointRanges[0], &args.m_restPoses[0]);
+    } else if (args.m_flags & B3_HAS_IK_TARGET_ORIENTATION)
+	{
+		b3CalculateInverseKinematicsAddTargetPositionWithOrientation(command,args.m_endEffectorLinkIndex,args.m_endEffectorTargetPosition,args.m_endEffectorTargetOrientation);
+	} else if (args.m_flags & B3_HAS_NULL_SPACE_VELOCITY)
+    {
+        b3CalculateInverseKinematicsPosWithNullSpaceVel(command, args.m_numDegreeOfFreedom, args.m_endEffectorLinkIndex, args.m_endEffectorTargetPosition, &args.m_lowerLimits[0], &args.m_upperLimits[0], &args.m_jointRanges[0], &args.m_restPoses[0]);
+    } else
+	{
+		b3CalculateInverseKinematicsAddTargetPurePosition(command,args.m_endEffectorLinkIndex,args.m_endEffectorTargetPosition);
+	}
+	
 
     b3SharedMemoryStatusHandle statusHandle;
 	statusHandle = b3SubmitClientCommandAndWaitStatus(m_data->m_physicsClient, command);
+
+	
 
     int numPos=0;
     
@@ -648,7 +683,7 @@ void b3RobotSimAPI::createJoint(int parentBodyIndex, int parentJointIndex, int c
     b3Assert(b3CanSubmitCommand(m_data->m_physicsClient));
     if (b3CanSubmitCommand(m_data->m_physicsClient))
     {
-        statusHandle = b3SubmitClientCommandAndWaitStatus(m_data->m_physicsClient, b3CreateJoint(m_data->m_physicsClient, parentBodyIndex, parentJointIndex, childBodyIndex, childJointIndex, jointInfo));
+        statusHandle = b3SubmitClientCommandAndWaitStatus(m_data->m_physicsClient, b3InitCreateUserConstraintCommand(m_data->m_physicsClient, parentBodyIndex, parentJointIndex, childBodyIndex, childJointIndex, jointInfo));
     }
 }
 
@@ -875,7 +910,8 @@ bool b3RobotSimAPI::connect(GUIHelperInterface* guiHelper)
 	}
 	else
 	{
-		m_data->m_clientServerDirect = new PhysicsDirect();
+		PhysicsServerCommandProcessor* sdk = new PhysicsServerCommandProcessor;
+		m_data->m_clientServerDirect = new PhysicsDirect(sdk);
 		bool connected = m_data->m_clientServerDirect->connect(guiHelper);
 		m_data->m_physicsClient = (b3PhysicsClientHandle)m_data->m_clientServerDirect;
 
@@ -943,10 +979,12 @@ void b3RobotSimAPI::renderScene()
 		}
 	}
 
+    
 	if (m_data->m_clientServerDirect)
 	{
 		m_data->m_clientServerDirect->renderScene();
 	}
+    
 	m_data->m_physicsServer.renderScene();
 }
 
@@ -961,7 +999,7 @@ void b3RobotSimAPI::getBodyJacobian(int bodyUniqueId, int linkIndex, const doubl
     }
 }
 
-void b3RobotSimAPI::getLinkState(int bodyUniqueId, int linkIndex, double* worldPosition)
+void b3RobotSimAPI::getLinkState(int bodyUniqueId, int linkIndex, double* worldPosition, double* worldOrientation)
 {
     b3SharedMemoryCommandHandle command = b3RequestActualStateCommandInit(m_data->m_physicsClient,bodyUniqueId);
     b3SharedMemoryStatusHandle statusHandle = b3SubmitClientCommandAndWaitStatus(m_data->m_physicsClient, command);
@@ -973,5 +1011,18 @@ void b3RobotSimAPI::getLinkState(int bodyUniqueId, int linkIndex, double* worldP
         worldPosition[0] = linkState.m_worldPosition[0];
         worldPosition[1] = linkState.m_worldPosition[1];
         worldPosition[2] = linkState.m_worldPosition[2];
+        worldOrientation[0] = linkState.m_worldOrientation[0];
+        worldOrientation[1] = linkState.m_worldOrientation[1];
+        worldOrientation[2] = linkState.m_worldOrientation[2];
+        worldOrientation[3] = linkState.m_worldOrientation[3];
     }
+}
+
+void b3RobotSimAPI::loadBunny(double scale, double mass, double collisionMargin)
+{
+    b3SharedMemoryCommandHandle command = b3LoadBunnyCommandInit(m_data->m_physicsClient);
+    b3LoadBunnySetScale(command, scale);
+    b3LoadBunnySetMass(command, mass);
+    b3LoadBunnySetCollisionMargin(command, collisionMargin);
+    b3SubmitClientCommand(m_data->m_physicsClient, command);
 }

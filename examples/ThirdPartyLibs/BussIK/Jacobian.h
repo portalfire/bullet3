@@ -54,6 +54,7 @@ enum UpdateMode {
 class Jacobian {
 public:
 	Jacobian(Tree*);
+	Jacobian(bool useAngularJacobian, int nDof);
 
 	void ComputeJacobian(VectorR3* targets);
 	const MatrixRmn& ActiveJacobian() const { return *Jactive; } 
@@ -69,8 +70,10 @@ public:
 	void CalcDeltaThetasDLS();
 	void CalcDeltaThetasDLSwithSVD();
 	void CalcDeltaThetasSDLS();
+    void CalcDeltaThetasDLSwithNullspace( const VectorRn& desiredV);
 
 	void UpdateThetas();
+    void UpdateThetaDot();
 	double UpdateErrorArray(VectorR3* targets);		// Returns sum of errors
 	const VectorRn& GetErrorArray() const { return errorArray; }
 	void UpdatedSClampValue(VectorR3* targets);
@@ -88,8 +91,8 @@ public:
     int GetNumCols() {return nCol;}
     
 public:
-	Tree* tree;			// tree associated with this Jacobian matrix
-	int nEffector;		// Number of end effectors
+	Tree* m_tree;			// tree associated with this Jacobian matrix
+	int m_nEffector;		// Number of end effectors
 	int nJoint;			// Number of joints
 	int nRow;			// Total number of rows the real J (= 3*number of end effectors for now)
 	int nCol;			// Total number of columns in the real J (= number of joints for now)

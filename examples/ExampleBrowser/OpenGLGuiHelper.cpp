@@ -289,18 +289,25 @@ void OpenGLGuiHelper::syncPhysicsToGraphics(const btDiscreteDynamicsWorld* rbWor
 		return;
 
 	int numCollisionObjects = rbWorld->getNumCollisionObjects();
-	for (int i = 0; i<numCollisionObjects; i++)
 	{
-		btCollisionObject* colObj = rbWorld->getCollisionObjectArray()[i];
-		btVector3 pos = colObj->getWorldTransform().getOrigin();
-		btQuaternion orn = colObj->getWorldTransform().getRotation();
-		int index = colObj->getUserIndex();
-		if (index >= 0)
+		B3_PROFILE("write all InstanceTransformToCPU");
+		for (int i = 0; i<numCollisionObjects; i++)
 		{
-			m_data->m_glApp->m_renderer->writeSingleInstanceTransformToCPU(pos, orn, index);
+			B3_PROFILE("writeSingleInstanceTransformToCPU");
+			btCollisionObject* colObj = rbWorld->getCollisionObjectArray()[i];
+			btVector3 pos = colObj->getWorldTransform().getOrigin();
+			btQuaternion orn = colObj->getWorldTransform().getRotation();
+			int index = colObj->getUserIndex();
+			if (index >= 0)
+			{
+				m_data->m_glApp->m_renderer->writeSingleInstanceTransformToCPU(pos, orn, index);
+			}
 		}
 	}
-	m_data->m_glApp->m_renderer->writeTransforms();
+	{
+		B3_PROFILE("writeTransforms");
+		m_data->m_glApp->m_renderer->writeTransforms();
+	}
 }
 
 
@@ -331,7 +338,7 @@ void OpenGLGuiHelper::render(const btDiscreteDynamicsWorld* rbWorld)
 	if (m_data->m_gl2ShapeDrawer && rbWorld)
 	{
 		m_data->m_gl2ShapeDrawer->enableTexture(true);
-		m_data->m_gl2ShapeDrawer->drawScene(rbWorld,true);
+		m_data->m_gl2ShapeDrawer->drawScene(rbWorld,true, m_data->m_glApp->getUpAxis());
 	}
 }
 void OpenGLGuiHelper::createPhysicsDebugDrawer(btDiscreteDynamicsWorld* rbWorld)
@@ -505,6 +512,8 @@ void OpenGLGuiHelper::autogenerateGraphicsObjects(btDiscreteDynamicsWorld* rbWor
     
 void OpenGLGuiHelper::drawText3D( const char* txt, float posX, float posY, float posZ, float size)
 {
+	B3_PROFILE("OpenGLGuiHelper::drawText3D");
+
     btAssert(m_data->m_glApp);
     m_data->m_glApp->drawText3D(txt,posX,posY,posZ,size);
 }

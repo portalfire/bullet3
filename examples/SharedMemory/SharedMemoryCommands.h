@@ -24,7 +24,7 @@
 	typedef unsigned long long int smUint64_t;
 #endif
 
-#define SHARED_MEMORY_MAX_STREAM_CHUNK_SIZE (256*1024)
+#define SHARED_MEMORY_MAX_STREAM_CHUNK_SIZE (512*1024)
 
 #define SHARED_MEMORY_SERVER_TEST_C
 #define MAX_DEGREE_OF_FREEDOM 128
@@ -67,6 +67,11 @@ struct SdfArgs
     int m_useMultiBody;
 };
 
+struct FileArgs
+{
+	char m_fileName[MAX_URDF_FILENAME_LENGTH];
+};
+
 enum EnumUrdfArgsUpdateFlags
 {
 	URDF_ARGS_FILE_NAME=1,
@@ -90,7 +95,6 @@ struct UrdfArgs
 struct BulletDataStreamArgs
 {
 	char m_bulletFileName[MAX_FILENAME_LENGTH];
-	int m_streamChunkLength;
 	int m_bodyUniqueId;
 };
 
@@ -134,14 +138,26 @@ struct RequestPixelDataArgs
 	int m_startPixelIndex;
 	int m_pixelWidth;
 	int m_pixelHeight;
+	float m_lightDirection[3];
+    float m_lightColor[3];
 };
 
 enum EnumRequestPixelDataUpdateFlags
 {
 	REQUEST_PIXEL_ARGS_HAS_CAMERA_MATRICES=1,
-	REQUEST_PIXEL_ARGS_SET_PIXEL_WIDTH_HEIGHT=4,
+	REQUEST_PIXEL_ARGS_SET_PIXEL_WIDTH_HEIGHT=2,
+	REQUEST_PIXEL_ARGS_SET_LIGHT_DIRECTION=4,
+    REQUEST_PIXEL_ARGS_SET_LIGHT_COLOR=8,
 	//don't exceed (1<<15), because this enum is shared with EnumRenderer in SharedMemoryPublic.h
 	
+};
+
+enum EnumRequestContactDataUpdateFlags
+{
+	CMD_REQUEST_CONTACT_POINT_HAS_QUERY_MODE=1,
+	CMD_REQUEST_CONTACT_POINT_HAS_CLOSEST_DISTANCE_THRESHOLD=2,
+	CMD_REQUEST_CONTACT_POINT_HAS_LINK_INDEX_A_FILTER = 4,
+	CMD_REQUEST_CONTACT_POINT_HAS_LINK_INDEX_B_FILTER = 8,
 };
 
 struct RequestContactDataArgs
@@ -149,7 +165,46 @@ struct RequestContactDataArgs
     int m_startingContactPointIndex;
     int m_objectAIndexFilter;
 	int m_objectBIndexFilter;
+	int m_linkIndexAIndexFilter;
+	int m_linkIndexBIndexFilter;
+	double m_closestDistanceThreshold;
+	int m_mode;
 };
+
+struct RequestOverlappingObjectsArgs
+{
+	int m_startingOverlappingObjectIndex;
+	double m_aabbQueryMin[3];
+	double m_aabbQueryMax[3];
+};
+
+struct RequestVisualShapeDataArgs
+{
+	int m_bodyUniqueId;
+	int m_startingVisualShapeIndex;
+};
+
+struct UpdateVisualShapeDataArgs
+{
+    int m_bodyUniqueId;
+    int m_jointIndex;
+    int m_shapeIndex;
+    int m_textureUniqueId;
+};
+
+struct LoadTextureArgs
+{
+    char m_textureFileName[MAX_FILENAME_LENGTH];
+};
+
+struct SendVisualShapeDataArgs
+{
+	int m_bodyUniqueId;
+    int m_startingVisualShapeIndex;
+    int m_numVisualShapesCopied;
+    int m_numRemainingVisualShapes;
+};
+
 
 
 struct SendDebugLinesArgs
@@ -223,8 +278,22 @@ enum EnumSimParamUpdateFlags
 	SIM_PARAM_UPDATE_NUM_SOLVER_ITERATIONS=4,	
 	SIM_PARAM_UPDATE_NUM_SIMULATION_SUB_STEPS=8,
 	SIM_PARAM_UPDATE_REAL_TIME_SIMULATION = 16,
-	SIM_PARAM_UPDATE_DEFAULT_CONTACT_ERP=32
+	SIM_PARAM_UPDATE_DEFAULT_CONTACT_ERP=32,
+	SIM_PARAM_UPDATE_INTERNAL_SIMULATION_FLAGS=64
 };
+
+enum EnumLoadBunnyUpdateFlags
+{
+    LOAD_BUNNY_UPDATE_SCALE=1,
+    LOAD_BUNNY_UPDATE_MASS=2,
+    LOAD_BUNNY_UPDATE_COLLISION_MARGIN=4
+};
+
+enum EnumSimParamInternalSimFlags
+{
+	SIM_PARAM_INTERNAL_CREATE_ROBOT_ASSETS=1,
+};
+
 
 ///Controlling a robot involves sending the desired state to its joint motor controllers.
 ///The control mode determines the state variables used for motor control.
@@ -235,7 +304,15 @@ struct SendPhysicsSimulationParameters
 	int m_numSimulationSubSteps;
 	int m_numSolverIterations;
 	bool m_allowRealTimeSimulation;
+	int m_internalSimFlags;
 	double m_defaultContactERP;
+};
+
+struct LoadBunnyArgs
+{
+    double m_scale;
+    double m_mass;
+    double m_collisionMargin;
 };
 
 struct RequestActualStateArgs
@@ -393,8 +470,10 @@ struct CalculateJacobianResultArgs
 
 enum EnumCalculateInverseKinematicsFlags
 {
-    IK_HAS_TARGET_ORIENTATION=1,
-    IK_HAS_CURRENT_JOINT_POSITIONS=2,
+    IK_HAS_TARGET_POSITION=1,
+	IK_HAS_TARGET_ORIENTATION=2,
+    IK_HAS_NULL_SPACE_VELOCITY=4,
+    //IK_HAS_CURRENT_JOINT_POSITIONS=8,//not used yet
 };
 
 struct CalculateInverseKinematicsArgs
@@ -402,7 +481,12 @@ struct CalculateInverseKinematicsArgs
 	int m_bodyUniqueId;
 //	double m_jointPositionsQ[MAX_DEGREE_OF_FREEDOM];
 	double m_targetPosition[3];
-//	double m_targetOrientation[4];//orientation represented as quaternion, x,y,z,w
+	double m_targetOrientation[4];//orientation represented as quaternion, x,y,z,w
+	int m_endEffectorLinkIndex;
+    double m_lowerLimit[MAX_DEGREE_OF_FREEDOM];
+    double m_upperLimit[MAX_DEGREE_OF_FREEDOM];
+    double m_jointRange[MAX_DEGREE_OF_FREEDOM];
+    double m_restPose[MAX_DEGREE_OF_FREEDOM];
 };
 
 struct CalculateInverseKinematicsResultArgs
@@ -412,7 +496,14 @@ struct CalculateInverseKinematicsResultArgs
 	double m_jointPositions[MAX_DEGREE_OF_FREEDOM];
 };
 
-struct CreateJointArgs
+enum EnumUserConstraintFlags
+{
+    USER_CONSTRAINT_ADD_CONSTRAINT=1,
+	USER_CONSTRAINT_REMOVE_CONSTRAINT=2,
+	USER_CONSTRAINT_CHANGE_CONSTRAINT=4
+};
+
+struct UserConstraintArgs
 {
     int m_parentBodyIndex;
     int m_parentJointIndex;
@@ -422,7 +513,52 @@ struct CreateJointArgs
     double m_childFrame[7];
     double m_jointAxis[3];
     int m_jointType;
+	int m_userConstraintUniqueId;
 };
+
+struct UserConstraintResultArgs
+{
+	int m_userConstraintUniqueId;
+};
+
+enum EnumUserDebugDrawFlags
+{
+    USER_DEBUG_HAS_LINE=1,
+	USER_DEBUG_HAS_TEXT=2,
+	USER_DEBUG_REMOVE_ONE_ITEM=4,
+	USER_DEBUG_REMOVE_ALL=8,	
+	USER_DEBUG_SET_CUSTOM_OBJECT_COLOR = 16,
+	USER_DEBUG_REMOVE_CUSTOM_OBJECT_COLOR = 32,
+
+};
+
+struct UserDebugDrawArgs
+{
+	double	m_debugLineFromXYZ[3];
+	double	m_debugLineToXYZ[3];
+	double	m_debugLineColorRGB[3];
+	double	m_lineWidth;
+	
+	double m_lifeTime;
+	int m_removeItemUniqueId;
+
+	char m_text[MAX_FILENAME_LENGTH];
+	double m_textPositionXYZ[3];
+	double m_textColorRGB[3];
+	double m_textSize;
+
+	double m_objectDebugColorRGB[3];
+	int m_objectUniqueId;
+	int m_linkIndex;
+};
+
+
+
+struct UserDebugDrawResultArgs
+{
+	int m_debugItemUniqueId;
+};
+
 
 struct SharedMemoryCommand
 {
@@ -438,6 +574,7 @@ struct SharedMemoryCommand
     {
         struct UrdfArgs m_urdfArguments;
 		struct SdfArgs m_sdfArguments;
+		struct FileArgs m_fileArguments;
 		struct SdfRequestInfoArgs m_sdfRequestInfoArgs;
 		struct InitPoseArgs m_initPoseArgs;
 		struct SendPhysicsSimulationParameters m_physSimParamArgs;
@@ -452,9 +589,15 @@ struct SharedMemoryCommand
         struct ExternalForceArgs m_externalForceArguments;
 		struct CalculateInverseDynamicsArgs m_calculateInverseDynamicsArguments;
         struct CalculateJacobianArgs m_calculateJacobianArguments;
-        struct CreateJointArgs m_createJointArguments;
+        struct UserConstraintArgs m_userConstraintArguments;
         struct RequestContactDataArgs m_requestContactPointArguments;
+		struct RequestOverlappingObjectsArgs m_requestOverlappingObjectsArgs;
+        struct RequestVisualShapeDataArgs m_requestVisualShapeDataArguments;
+        struct UpdateVisualShapeDataArgs m_updateVisualShapeDataArguments;
+        struct LoadTextureArgs m_loadTextureArguments;
 		struct CalculateInverseKinematicsArgs m_calculateInverseKinematicsArguments;
+		struct UserDebugDrawArgs m_userDebugDrawArgs;
+        struct LoadBunnyArgs m_loadBunnyArguments;
     };
 };
 
@@ -470,6 +613,13 @@ struct SendContactDataArgs
     int m_numRemainingContactPoints;
 };
 
+struct SendOverlappingObjectsArgs
+{
+	int m_startingOverlappingObjectIndex;
+	int m_numOverlappingObjectsCopied;
+	int m_numRemainingOverlappingObjects;
+};
+
 struct SharedMemoryStatus
 {
 	int m_type;
@@ -477,6 +627,10 @@ struct SharedMemoryStatus
 	smUint64_t	m_timeStamp;
 	int	m_sequenceNumber;
 	
+	//m_streamBytes is only for internal purposes
+	int		m_numDataStreamBytes;
+	char*	m_dataStream;
+
 	union
 	{
 		struct BulletDataStreamArgs	m_dataStreamArguments;
@@ -488,7 +642,11 @@ struct SharedMemoryStatus
 		struct CalculateInverseDynamicsResultArgs m_inverseDynamicsResultArgs;
         struct CalculateJacobianResultArgs m_jacobianResultArgs;
 		struct SendContactDataArgs m_sendContactPointArgs;
+		struct SendOverlappingObjectsArgs m_sendOverlappingObjectsArgs;
 		struct CalculateInverseKinematicsResultArgs m_inverseKinematicsResultArgs;
+		struct SendVisualShapeDataArgs m_sendVisualShapeArgs;
+		struct UserDebugDrawResultArgs m_userDebugDrawArgs;
+		struct UserConstraintResultArgs m_userConstraintResultArgs;
 	};
 };
 

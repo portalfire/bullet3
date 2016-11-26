@@ -36,6 +36,8 @@ ADD_LIBRARY(BulletExampleBrowserLib
 	../Utils/b3Clock.h
 	../Utils/b3ResourcePath.cpp
 	../Utils/b3ResourcePath.h
+	../Utils/b3ERPCFMHelper.hpp
+	../Utils/b3ReferenceFrameHelper.hpp
 	${GwenGUISupport_SRCS}
 	${GwenGUISupport_HDRS}
 	
@@ -106,22 +108,55 @@ ELSE(WIN32)
 	ENDIF(APPLE)
 ENDIF(WIN32)
 
+IF (BULLET2_MULTITHREADED_OPEN_MP_DEMO)
+    ADD_DEFINITIONS("-DBT_USE_OPENMP=1")
+    IF (MSVC)
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp")
+    ELSE (MSVC)
+        # GCC, Clang
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+    ENDIF (MSVC)
+ENDIF (BULLET2_MULTITHREADED_OPEN_MP_DEMO)
+
+IF (BULLET2_MULTITHREADED_PPL_DEMO)
+    ADD_DEFINITIONS("-DBT_USE_PPL=1")
+ENDIF (BULLET2_MULTITHREADED_PPL_DEMO)
+
+IF (BULLET2_MULTITHREADED_TBB_DEMO)
+    SET (BULLET2_TBB_INCLUDE_DIR "not found" CACHE PATH "Directory for Intel TBB includes.")
+    SET (BULLET2_TBB_LIB_DIR "not found" CACHE PATH "Directory for Intel TBB libraries.")
+    find_library(TBB_LIBRARY tbb PATHS ${BULLET2_TBB_LIB_DIR})
+    find_library(TBBMALLOC_LIBRARY tbbmalloc PATHS ${BULLET2_TBB_LIB_DIR})
+    ADD_DEFINITIONS("-DBT_USE_TBB=1")
+    INCLUDE_DIRECTORIES( ${BULLET2_TBB_INCLUDE_DIR} )
+    LINK_LIBRARIES( ${TBB_LIBRARY} ${TBBMALLOC_LIBRARY} )
+ENDIF (BULLET2_MULTITHREADED_TBB_DEMO)
 
 SET(ExtendedTutorialsSources
-	../ExtendedTutorials/SimpleBox.cpp
-	../ExtendedTutorials/MultipleBoxes.cpp
-	../ExtendedTutorials/SimpleJoint.cpp
-	../ExtendedTutorials/SimpleCloth.cpp
 	../ExtendedTutorials/Chain.cpp 
-	../ExtendedTutorials/Bridge.cpp 
+	../ExtendedTutorials/Chain.h
+	../ExtendedTutorials/Bridge.cpp
+	../ExtendedTutorials/Bridge.h
 	../ExtendedTutorials/RigidBodyFromObj.cpp
+	../ExtendedTutorials/RigidBodyFromObj.h
+    ../ExtendedTutorials/SimpleBox.cpp
+	../ExtendedTutorials/SimpleBox.h
+	../ExtendedTutorials/MultipleBoxes.cpp
+	../ExtendedTutorials/MultipleBoxes.h
+	../ExtendedTutorials/SimpleCloth.cpp
+	../ExtendedTutorials/SimpleCloth.h
+	../ExtendedTutorials/SimpleJoint.cpp
+	../ExtendedTutorials/SimpleJoint.h
+	../ExtendedTutorials/NewtonsCradle.cpp
+	../ExtendedTutorials/NewtonsCradle.h
 	../ExtendedTutorials/InclinedPlane.cpp
 	../ExtendedTutorials/InclinedPlane.h
-	../ExtendedTutorials/NewtonsCradle.cpp
+	../ExtendedTutorials/MultiPendulum.cpp
+	../ExtendedTutorials/MultiPendulum.h
 )
 
 SET(BulletExampleBrowser_SRCS
-	
+
 	../TinyRenderer/geometry.cpp
 	../TinyRenderer/model.cpp
 	../TinyRenderer/tgaimage.cpp
@@ -131,9 +166,10 @@ SET(BulletExampleBrowser_SRCS
 	../SharedMemory/TinyRendererVisualShapeConverter.h
 	../SharedMemory/IKTrajectoryHelper.cpp
 	../SharedMemory/IKTrajectoryHelper.h
-	../RenderingExamples/TinyRendererSetup.cpp
+	
 	../SharedMemory/PhysicsServer.cpp
 	../SharedMemory/PhysicsClientSharedMemory.cpp
+	../SharedMemory/PhysicsClientSharedMemory_C_API.cpp
 	../SharedMemory/PhysicsClient.cpp
 	../SharedMemory/PhysicsClientC_API.cpp
 	../SharedMemory/PhysicsServerExample.cpp
@@ -161,26 +197,20 @@ SET(BulletExampleBrowser_SRCS
 	../InverseKinematics/InverseKinematicsExample.h
 	../ForkLift/ForkLiftDemo.cpp
 	../ForkLift/ForkLiftDemo.h
+	../MultiThreadedDemo/MultiThreadedDemo.cpp
+	../MultiThreadedDemo/MultiThreadedDemo.h
+	../MultiThreadedDemo/CommonRigidBodyMTBase.cpp
+	../MultiThreadedDemo/CommonRigidBodyMTBase.h
+	../MultiThreadedDemo/ParallelFor.h
 	../Tutorial/Tutorial.cpp
 	../Tutorial/Tutorial.h
 	../Tutorial/Dof6ConstraintTutorial.cpp
 	../Tutorial/Dof6ConstraintTutorial.h
-	../ExtendedTutorials/SimpleBox.cpp
-	../ExtendedTutorials/SimpleBox.h
-	../ExtendedTutorials/MultipleBoxes.cpp
-	../ExtendedTutorials/MultipleBoxes.h
-	../ExtendedTutorials/SimpleCloth.cpp
-	../ExtendedTutorials/SimpleCloth.h
-	../ExtendedTutorials/SimpleJoint.cpp
-	../ExtendedTutorials/SimpleJoint.h
-	../ExtendedTutorials/NewtonsCradle.cpp
-	../ExtendedTutorials/NewtonsCradle.h
+	../Evolution/NN3DWalkers.cpp
+	../Evolution/NN3DWalkers.h
+	../Evolution/NN3DWalkersTimeWarpBase.h
 	../ExtendedTutorials/NewtonsRopeCradle.cpp
 	../ExtendedTutorials/NewtonsRopeCradle.h
-	../ExtendedTutorials/InclinedPlane.cpp
-	../ExtendedTutorials/InclinedPlane.h
-	../ExtendedTutorials/MultiPendulum.cpp
-	../ExtendedTutorials/MultiPendulum.h
 	../Collision/CollisionSdkC_Api.cpp
 	../Collision/CollisionSdkC_Api.h
 	../Collision/CollisionTutorialBullet2.cpp
@@ -208,10 +238,16 @@ SET(BulletExampleBrowser_SRCS
 	../MultiThreading/b3PosixThreadSupport.cpp
 	../MultiThreading/b3Win32ThreadSupport.cpp
 	../MultiThreading/b3ThreadSupportInterface.cpp
+	../RenderingExamples/TinyRendererSetup.cpp
 	../RenderingExamples/TimeSeriesCanvas.cpp
 	../RenderingExamples/TimeSeriesCanvas.h
 	../RenderingExamples/TimeSeriesFontData.cpp
 	../RenderingExamples/TimeSeriesFontData.h
+	../RenderingExamples/DynamicTexturedCubeDemo.cpp
+	../RenderingExamples/DynamicTexturedCubeDemo.h
+	../RenderingExamples/TinyVRGui.cpp
+	../RenderingExamples/TinyVRGui.h
+	
 	../RoboticsLearning/GripperGraspExample.cpp
 	../RoboticsLearning/GripperGraspExample.h
 	../RoboticsLearning/b3RobotSimAPI.cpp
@@ -339,9 +375,26 @@ ADD_CUSTOM_COMMAND(
                 COMMAND ${CMAKE_COMMAND} ARGS -E copy_directory ${BULLET_PHYSICS_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/data
         )
 
+IF (BULLET2_MULTITHREADED_TBB_DEMO AND WIN32)
+    # add a post build command to copy some dlls to the executable directory
+    set(TBB_VC_VER "vc12")
+    set(TBB_VC_ARCH "ia32")
+    # assume 32-bit build in VC12 for now
+    # checks can be added here at a later time
+    ADD_CUSTOM_COMMAND(TARGET App_ExampleBrowser POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${BULLET2_TBB_INCLUDE_DIR}/../bin/${TBB_VC_ARCH}/${TBB_VC_VER}/tbb.dll"
+        $<TARGET_FILE_DIR:App_ExampleBrowser>)
+    ADD_CUSTOM_COMMAND(TARGET App_ExampleBrowser POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${BULLET2_TBB_INCLUDE_DIR}/../bin/${TBB_VC_ARCH}/${TBB_VC_VER}/tbbmalloc.dll"
+        $<TARGET_FILE_DIR:App_ExampleBrowser>)
+ENDIF (BULLET2_MULTITHREADED_TBB_DEMO AND WIN32)
+
 
 IF (INTERNAL_ADD_POSTFIX_EXECUTABLE_NAMES)
 			SET_TARGET_PROPERTIES(App_ExampleBrowser PROPERTIES  DEBUG_POSTFIX "_Debug")
 			SET_TARGET_PROPERTIES(App_ExampleBrowser PROPERTIES  MINSIZEREL_POSTFIX "_MinsizeRel")
 			SET_TARGET_PROPERTIES(App_ExampleBrowser PROPERTIES  RELWITHDEBINFO_POSTFIX "_RelWithDebugInfo")
 ENDIF(INTERNAL_ADD_POSTFIX_EXECUTABLE_NAMES)
+

@@ -18,6 +18,7 @@
 
 struct BodyJointInfoCache
 {
+	std::string m_baseName;
 	btAlignedObjectArray<b3JointInfo> m_jointInfo;
 };
 
@@ -39,6 +40,8 @@ struct PhysicsClientSharedMemoryInternalData {
 	btAlignedObjectArray<int> m_cachedSegmentationMaskBuffer;
 
     btAlignedObjectArray<b3ContactPointData> m_cachedContactPoints;
+	btAlignedObjectArray<b3OverlappingObject> m_cachedOverlappingObjects;
+	btAlignedObjectArray<b3VisualShapeData> m_cachedVisualShapes;
 
     btAlignedObjectArray<int> m_bodyIdsRequestInfo;
     SharedMemoryStatus m_tempBackupServerStatus;
@@ -74,10 +77,41 @@ struct PhysicsClientSharedMemoryInternalData {
 
 
 
-
-int PhysicsClientSharedMemory::getNumJoints(int bodyIndex) const 
+int PhysicsClientSharedMemory::getNumBodies() const
 {
-	BodyJointInfoCache** bodyJointsPtr = m_data->m_bodyJointMap[bodyIndex];
+	return m_data->m_bodyJointMap.size();
+}
+
+int PhysicsClientSharedMemory::getBodyUniqueId(int serialIndex) const
+{
+	if ((serialIndex >= 0) && (serialIndex < getNumBodies()))
+	{
+		return m_data->m_bodyJointMap.getKeyAtIndex(serialIndex).getUid1();
+	}
+	return -1;
+}
+
+bool PhysicsClientSharedMemory::getBodyInfo(int bodyUniqueId, struct b3BodyInfo& info) const
+{
+	BodyJointInfoCache** bodyJointsPtr = m_data->m_bodyJointMap[bodyUniqueId];
+	if (bodyJointsPtr && *bodyJointsPtr)
+	{
+		BodyJointInfoCache* bodyJoints = *bodyJointsPtr;
+		info.m_baseName = bodyJoints->m_baseName.c_str();
+		return true;
+	}
+
+
+
+
+	return false;
+}
+
+
+
+int PhysicsClientSharedMemory::getNumJoints(int bodyUniqueId) const 
+{
+	BodyJointInfoCache** bodyJointsPtr = m_data->m_bodyJointMap[bodyUniqueId];
 	if (bodyJointsPtr && *bodyJointsPtr)
 	{
 		BodyJointInfoCache* bodyJoints = *bodyJointsPtr;
@@ -88,14 +122,17 @@ int PhysicsClientSharedMemory::getNumJoints(int bodyIndex) const
 	
 }
 
-bool PhysicsClientSharedMemory::getJointInfo(int bodyIndex, int jointIndex, b3JointInfo& info) const
+bool PhysicsClientSharedMemory::getJointInfo(int bodyUniqueId, int jointIndex, b3JointInfo& info) const
 {
-	BodyJointInfoCache** bodyJointsPtr = m_data->m_bodyJointMap[bodyIndex];
+	BodyJointInfoCache** bodyJointsPtr = m_data->m_bodyJointMap[bodyUniqueId];
 	if (bodyJointsPtr && *bodyJointsPtr)
 	{
 		BodyJointInfoCache* bodyJoints = *bodyJointsPtr;
-		info = bodyJoints->m_jointInfo[jointIndex];
-        return true;
+		if ((jointIndex >= 0) && (jointIndex < bodyJoints->m_jointInfo.size()))
+		{
+			info = bodyJoints->m_jointInfo[jointIndex];
+			return true;
+		}
 	}
     return false;
 }
@@ -171,6 +208,32 @@ bool PhysicsClientSharedMemory::connect() {
         b3Error("Cannot connect to shared memory");
         return false;
     }
+#if 0
+	if (m_data->m_isConnected)
+	{
+		//get all existing bodies and body info...
+
+		SharedMemoryCommand& command = m_data->m_testBlock1->m_clientCommands[0];
+		//now transfer the information of the individual objects etc.
+		command.m_type = CMD_REQUEST_BODY_INFO;
+		command.m_sdfRequestInfoArgs.m_bodyUniqueId = 37;
+		submitClientCommand(command);
+		int timeout = 1024 * 1024 * 1024;
+		
+		const SharedMemoryStatus* status = 0;
+
+		while ((status == 0) && (timeout-- > 0))
+		{
+			status = processServerStatus();
+		
+		}
+
+
+		//submitClientCommand(command);
+
+
+	}
+#endif
     return true;
 }
 
@@ -180,7 +243,7 @@ void PhysicsClientSharedMemory::processBodyJointInfo(int bodyUniqueId, const Sha
 {
     bParse::btBulletFile bf(
                             &this->m_data->m_testBlock1->m_bulletStreamDataServerToClientRefactor[0],
-                            serverCmd.m_dataStreamArguments.m_streamChunkLength);
+                            serverCmd.m_numDataStreamBytes);
     bf.setFileDNAisMemoryDNA();
     bf.parse(false);
     
@@ -196,12 +259,13 @@ void PhysicsClientSharedMemory::processBodyJointInfo(int bodyUniqueId, const Sha
             Bullet::btMultiBodyDoubleData* mb =
             (Bullet::btMultiBodyDoubleData*)bf.m_multiBodies[i];
             
+			bodyJoints->m_baseName = mb->m_baseName;
             addJointInfoFromMultiBodyData(mb,bodyJoints, m_data->m_verboseOutput);
         } else
         {
             Bullet::btMultiBodyFloatData* mb =
             (Bullet::btMultiBodyFloatData*)bf.m_multiBodies[i];
-            
+			bodyJoints->m_baseName = mb->m_baseName;
             addJointInfoFromMultiBodyData(mb,bodyJoints, m_data->m_verboseOutput);
         }
     }
@@ -260,22 +324,23 @@ const SharedMemoryStatus* PhysicsClientSharedMemory::processServerStatus() {
 
                 break;
             }
+
             case CMD_URDF_LOADING_COMPLETED: {
                 
                 if (m_data->m_verboseOutput) {
                     b3Printf("Server loading the URDF OK\n");
                 }
 
-                if (serverCmd.m_dataStreamArguments.m_streamChunkLength > 0) {
+                if (serverCmd.m_numDataStreamBytes > 0) {
                     bParse::btBulletFile bf(
                         this->m_data->m_testBlock1->m_bulletStreamDataServerToClientRefactor,
-                        serverCmd.m_dataStreamArguments.m_streamChunkLength);
+                        serverCmd.m_numDataStreamBytes);
                     bf.setFileDNAisMemoryDNA();
                     bf.parse(false);
-					int bodyIndex = serverCmd.m_dataStreamArguments.m_bodyUniqueId;
+					int bodyUniqueId = serverCmd.m_dataStreamArguments.m_bodyUniqueId;
 
 					BodyJointInfoCache* bodyJoints = new BodyJointInfoCache;
-                    m_data->m_bodyJointMap.insert(bodyIndex,bodyJoints);
+                    m_data->m_bodyJointMap.insert(bodyUniqueId,bodyJoints);
 
                     for (int i = 0; i < bf.m_multiBodies.size(); i++) {
 
@@ -561,6 +626,30 @@ const SharedMemoryStatus* PhysicsClientSharedMemory::processServerStatus() {
 				b3Warning("Inverse Dynamics computations failed");
 				break;
 			}
+			case CMD_REQUEST_AABB_OVERLAP_FAILED:
+			{
+				b3Warning("Overlapping object query failed");
+				break;
+			}
+			case CMD_REQUEST_AABB_OVERLAP_COMPLETED:
+			{
+				if (m_data->m_verboseOutput)
+				{
+					b3Printf("Overlapping object request completed");
+				}
+
+				int startOverlapIndex = serverCmd.m_sendOverlappingObjectsArgs.m_startingOverlappingObjectIndex;
+				int numOverlapCopied = serverCmd.m_sendOverlappingObjectsArgs.m_numOverlappingObjectsCopied;
+				m_data->m_cachedOverlappingObjects.resize(startOverlapIndex + numOverlapCopied);
+				b3OverlappingObject* objects = (b3OverlappingObject*)m_data->m_testBlock1->m_bulletStreamDataServerToClientRefactor;
+
+				for (int i = 0; i < numOverlapCopied; i++)
+				{
+					m_data->m_cachedOverlappingObjects[startOverlapIndex + i] = objects[i];
+				}
+
+				break;
+			}
             case CMD_CONTACT_POINT_INFORMATION_COMPLETED:
                 {
                     if (m_data->m_verboseOutput) 
@@ -586,9 +675,103 @@ const SharedMemoryStatus* PhysicsClientSharedMemory::processServerStatus() {
                     b3Warning("Contact Point Information Request failed");
                     break;
                 }
-		
+
+			case CMD_SAVE_WORLD_COMPLETED:
+				break;
+					
+			case CMD_SAVE_WORLD_FAILED:
+			{
+				b3Warning("Saving world  failed");
+				break;
+			}
+			case CMD_CALCULATE_INVERSE_KINEMATICS_COMPLETED:
+			{
+                    break;
+                }
+            case CMD_CALCULATE_INVERSE_KINEMATICS_FAILED:
+                {
+                    b3Warning("Calculate Inverse Kinematics Request failed");
+                    break;
+                }
+			case CMD_VISUAL_SHAPE_INFO_COMPLETED:
+			{
+				if (m_data->m_verboseOutput)
+				{
+					b3Printf("Visual Shape Information Request OK\n");
+				}
+				int startVisualShapeIndex = serverCmd.m_sendVisualShapeArgs.m_startingVisualShapeIndex;
+				int numVisualShapesCopied = serverCmd.m_sendVisualShapeArgs.m_numVisualShapesCopied;
+				m_data->m_cachedVisualShapes.resize(startVisualShapeIndex + numVisualShapesCopied);
+				b3VisualShapeData* shapeData = (b3VisualShapeData*)m_data->m_testBlock1->m_bulletStreamDataServerToClientRefactor;
+				for (int i = 0; i < numVisualShapesCopied; i++)
+				{
+					m_data->m_cachedVisualShapes[startVisualShapeIndex + i] = shapeData[i];
+				}
+
+				break;
+			}
+			case CMD_VISUAL_SHAPE_INFO_FAILED:
+			{
+				b3Warning("Visual Shape Info Request failed");
+				break;
+			}
+            case CMD_VISUAL_SHAPE_UPDATE_COMPLETED:
+            {
+                break;
+            }
+            case CMD_VISUAL_SHAPE_UPDATE_FAILED:
+            {
+                b3Warning("Visual Shape Update failed");
+                break;
+            }
+            case CMD_LOAD_TEXTURE_COMPLETED:
+            {
+                break;
+            }
+            case CMD_LOAD_TEXTURE_FAILED:
+            {
+                b3Warning("Load texture failed");
+                break;
+            }
+			case CMD_BULLET_LOADING_COMPLETED:
+			{
+				break;
+			}
+			case CMD_BULLET_LOADING_FAILED:
+			{
+				b3Warning("Load .bullet failed");
+				break;
+			}
+			case CMD_BULLET_SAVING_FAILED:
+			{
+				b3Warning("Save .bullet failed");
+				break;
+			}
+			case CMD_MJCF_LOADING_FAILED:
+			{
+				b3Warning("Load .mjcf failed");
+				break;
+			}
+			case CMD_USER_DEBUG_DRAW_COMPLETED:
+			{
+				break;
+			}
+			case CMD_USER_DEBUG_DRAW_FAILED:
+			{
+				b3Warning("User debug draw failed");
+				break;
+			}
+			case CMD_USER_CONSTRAINT_COMPLETED:
+			{
+				break;
+			}
+			case CMD_USER_CONSTRAINT_FAILED:
+			{
+				b3Warning("createConstraint failed");
+				break;
+			}
             default: {
-                b3Error("Unknown server status\n");
+                b3Error("Unknown server status %d\n", serverCmd.m_type);
                 btAssert(0);
             }
         };
@@ -648,6 +831,18 @@ const SharedMemoryStatus* PhysicsClientSharedMemory::processServerStatus() {
                 m_data->m_lastServerStatus = m_data->m_tempBackupServerStatus;
             }
         }
+
+		if (serverCmd.m_type == CMD_REQUEST_AABB_OVERLAP_COMPLETED)
+		{
+			SharedMemoryCommand& command = m_data->m_testBlock1->m_clientCommands[0];
+			if (serverCmd.m_sendOverlappingObjectsArgs.m_numRemainingOverlappingObjects > 0 && serverCmd.m_sendOverlappingObjectsArgs.m_numOverlappingObjectsCopied)
+			{
+				command.m_type = CMD_REQUEST_AABB_OVERLAP;
+				command.m_requestOverlappingObjectsArgs.m_startingOverlappingObjectIndex = serverCmd.m_sendOverlappingObjectsArgs.m_startingOverlappingObjectIndex + serverCmd.m_sendOverlappingObjectsArgs.m_numOverlappingObjectsCopied;
+				submitClientCommand(command);
+				return 0;
+			}
+		}
         
         if (serverCmd.m_type == CMD_CONTACT_POINT_INFORMATION_COMPLETED)
         {
@@ -663,6 +858,21 @@ const SharedMemoryStatus* PhysicsClientSharedMemory::processServerStatus() {
 			}
         }
         
+		if (serverCmd.m_type == CMD_VISUAL_SHAPE_INFO_COMPLETED)
+		{
+			SharedMemoryCommand& command = m_data->m_testBlock1->m_clientCommands[0];
+			if (serverCmd.m_sendVisualShapeArgs.m_numRemainingVisualShapes >0 && serverCmd.m_sendVisualShapeArgs.m_numVisualShapesCopied)
+			{
+				command.m_type = CMD_REQUEST_VISUAL_SHAPE_INFO;
+				command.m_requestVisualShapeDataArguments.m_startingVisualShapeIndex = serverCmd.m_sendVisualShapeArgs.m_startingVisualShapeIndex + serverCmd.m_sendVisualShapeArgs.m_numVisualShapesCopied;
+				command.m_requestVisualShapeDataArguments.m_bodyUniqueId = serverCmd.m_sendVisualShapeArgs.m_bodyUniqueId;
+				submitClientCommand(command);
+				return 0;
+			}
+		}
+
+		
+
 		if (serverCmd.m_type == CMD_CAMERA_IMAGE_COMPLETED)
 		{
 			SharedMemoryCommand& command = m_data->m_testBlock1->m_clientCommands[0];
@@ -765,6 +975,21 @@ void PhysicsClientSharedMemory::getCachedContactPointInformation(struct b3Contac
 	contactPointData->m_contactPointData = contactPointData->m_numContactPoints? &m_data->m_cachedContactPoints[0] : 0;
 
 }
+
+void PhysicsClientSharedMemory::getCachedOverlappingObjects(struct b3AABBOverlapData* overlappingObjects)
+{
+	overlappingObjects->m_numOverlappingObjects = m_data->m_cachedOverlappingObjects.size();
+	overlappingObjects->m_overlappingObjects = m_data->m_cachedOverlappingObjects.size() ?
+		&m_data->m_cachedOverlappingObjects[0] : 0;
+}
+
+
+void PhysicsClientSharedMemory::getCachedVisualShapeInformation(struct b3VisualShapeInformation* visualShapesInfo)
+{
+	visualShapesInfo->m_numVisualShapes = m_data->m_cachedVisualShapes.size();
+	visualShapesInfo->m_visualShapeData = visualShapesInfo->m_numVisualShapes ? &m_data->m_cachedVisualShapes[0] : 0;
+}
+
 
 const float* PhysicsClientSharedMemory::getDebugLinesFrom() const {
     if (m_data->m_debugLinesFrom.size()) {

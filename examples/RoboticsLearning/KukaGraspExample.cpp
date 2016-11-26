@@ -27,6 +27,8 @@ class KukaGraspExample : public CommonExampleInterface
     int m_targetSphereInstance;
     b3Vector3 m_targetPos;
     b3Vector3 m_worldPos;
+    b3Vector4 m_targetOri;
+    b3Vector4 m_worldOri;
     double m_time;
 	int m_options;
 	
@@ -76,7 +78,6 @@ public:
         
         
         
-        m_ikHelper.createKukaIIWA();
         
 		bool connected = m_robotSim.connect(m_guiHelper);
 		b3Printf("robotSim connected = %d",connected);
@@ -112,6 +113,7 @@ public:
                  */
             }
             
+			if (0)
         	{
 				b3RobotSimLoadFileArgs args("");
 				args.m_fileName = "kiva_shelf/model.sdf";
@@ -145,7 +147,7 @@ public:
 
         m_time+=dt;
         m_targetPos.setValue(0.4-0.4*b3Cos( m_time), 0, 0.8+0.4*b3Cos( m_time));
-
+        m_targetOri.setValue(0, 1.0, 0, 0);
         
         
         int numJoints = m_robotSim.getNumJoints(m_kukaIndex);
@@ -155,6 +157,7 @@ public:
             double q_current[7]={0,0,0,0,0,0,0};
 
             double world_position[3]={0,0,0};
+            double world_orientation[4]={0,0,0,0};
             b3JointStates jointStates;
             
             if (m_robotSim.getJointStates(m_kukaIndex,jointStates))
@@ -166,14 +169,19 @@ public:
                     q_current[i] = jointStates.m_actualStateQ[i+7];
                 }
             }
-            // compute body position
-            m_robotSim.getLinkState(0, 6, world_position);
+            // compute body position and orientation
+            m_robotSim.getLinkState(0, 6, world_position, world_orientation);
             m_worldPos.setValue(world_position[0], world_position[1], world_position[2]);
+            m_worldOri.setValue(world_orientation[0], world_orientation[1], world_orientation[2], world_orientation[3]);
             
-            b3Vector3DoubleData dataOut;
-            m_targetPos.serializeDouble(dataOut);
+            b3Vector3DoubleData targetPosDataOut;
+            m_targetPos.serializeDouble(targetPosDataOut);
             b3Vector3DoubleData worldPosDataOut;
             m_worldPos.serializeDouble(worldPosDataOut);
+            b3Vector3DoubleData targetOriDataOut;
+            m_targetOri.serializeDouble(targetOriDataOut);
+            b3Vector3DoubleData worldOriDataOut;
+            m_worldOri.serializeDouble(worldOriDataOut);
 
             
 			b3RobotSimInverseKinematicArgs ikargs;
@@ -183,16 +191,53 @@ public:
 			ikargs.m_bodyUniqueId = m_kukaIndex;
 //			ikargs.m_currentJointPositions = q_current;
 //			ikargs.m_numPositions = 7;
-            ikargs.m_endEffectorTargetPosition[0] = dataOut.m_floats[0];
-            ikargs.m_endEffectorTargetPosition[1] = dataOut.m_floats[1];
-            ikargs.m_endEffectorTargetPosition[2] = dataOut.m_floats[2];
+            ikargs.m_endEffectorTargetPosition[0] = targetPosDataOut.m_floats[0];
+            ikargs.m_endEffectorTargetPosition[1] = targetPosDataOut.m_floats[1];
+            ikargs.m_endEffectorTargetPosition[2] = targetPosDataOut.m_floats[2];
 			
-//todo: orientation IK target
-//			ikargs.m_endEffectorTargetOrientation[0] = 0;
-//			ikargs.m_endEffectorTargetOrientation[1] = 0;
-//			ikargs.m_endEffectorTargetOrientation[2] = 0;
-//			ikargs.m_endEffectorTargetOrientation[3] = 1;
+			ikargs.m_flags |= /*B3_HAS_IK_TARGET_ORIENTATION +*/ B3_HAS_NULL_SPACE_VELOCITY;
 
+			ikargs.m_endEffectorTargetOrientation[0] = targetOriDataOut.m_floats[0];
+			ikargs.m_endEffectorTargetOrientation[1] = targetOriDataOut.m_floats[1];
+			ikargs.m_endEffectorTargetOrientation[2] = targetOriDataOut.m_floats[2];
+			ikargs.m_endEffectorTargetOrientation[3] = targetOriDataOut.m_floats[3];
+            ikargs.m_endEffectorLinkIndex = 6;
+            
+            // Settings based on default KUKA arm setting
+            ikargs.m_lowerLimits.resize(numJoints);
+            ikargs.m_upperLimits.resize(numJoints);
+            ikargs.m_jointRanges.resize(numJoints);
+            ikargs.m_restPoses.resize(numJoints);
+            ikargs.m_lowerLimits[0] = -2.32;
+            ikargs.m_lowerLimits[1] = -1.6;
+            ikargs.m_lowerLimits[2] = -2.32;
+            ikargs.m_lowerLimits[3] = -1.6;
+            ikargs.m_lowerLimits[4] = -2.32;
+            ikargs.m_lowerLimits[5] = -1.6;
+            ikargs.m_lowerLimits[6] = -2.4;
+            ikargs.m_upperLimits[0] = 2.32;
+            ikargs.m_upperLimits[1] = 1.6;
+            ikargs.m_upperLimits[2] = 2.32;
+            ikargs.m_upperLimits[3] = 1.6;
+            ikargs.m_upperLimits[4] = 2.32;
+            ikargs.m_upperLimits[5] = 1.6;
+            ikargs.m_upperLimits[6] = 2.4;
+            ikargs.m_jointRanges[0] = 5.8;
+            ikargs.m_jointRanges[1] = 4;
+            ikargs.m_jointRanges[2] = 5.8;
+            ikargs.m_jointRanges[3] = 4;
+            ikargs.m_jointRanges[4] = 5.8;
+            ikargs.m_jointRanges[5] = 4;
+            ikargs.m_jointRanges[6] = 6;
+            ikargs.m_restPoses[0] = 0;
+            ikargs.m_restPoses[1] = 0;
+            ikargs.m_restPoses[2] = 0;
+            ikargs.m_restPoses[3] = SIMD_HALF_PI;
+            ikargs.m_restPoses[4] = 0;
+            ikargs.m_restPoses[5] = -SIMD_HALF_PI*0.66;
+            ikargs.m_restPoses[6] = 0;
+            ikargs.m_numDegreeOfFreedom = numJoints;
+            
 			if (m_robotSim.calculateInverseKinematics(ikargs,ikresults))
 			{
                 //copy the IK result to the desired state of the motor/actuator
@@ -200,8 +245,10 @@ public:
                 {
                     b3JointMotorArgs t(CONTROL_MODE_POSITION_VELOCITY_PD);
                     t.m_targetPosition = ikresults.m_calculatedJointPositions[i];
-                    t.m_maxTorqueValue = 1000;
-                    t.m_kp= 1;
+                    t.m_maxTorqueValue = 100.0;
+                    t.m_kp= 1.0;
+					t.m_targetVelocity = 0;
+					t.m_kd = 1.0;
                     m_robotSim.setJointMotorControl(m_kukaIndex,i,t);
 
                 }

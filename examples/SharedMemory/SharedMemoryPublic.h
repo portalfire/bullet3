@@ -7,19 +7,22 @@ enum EnumSharedMemoryClientCommand
 {
     CMD_LOAD_SDF,
 	CMD_LOAD_URDF,
-        CMD_SEND_BULLET_DATA_STREAM,
-        CMD_CREATE_BOX_COLLISION_SHAPE,
-//      CMD_DELETE_BOX_COLLISION_SHAPE,
-      CMD_CREATE_RIGID_BODY,
-      CMD_DELETE_RIGID_BODY,
-    CMD_CREATE_SENSOR,///enable or disable joint feedback for force/torque sensors
-//    CMD_REQUEST_SENSOR_MEASUREMENTS,//see CMD_REQUEST_ACTUAL_STATE/CMD_ACTUAL_STATE_UPDATE_COMPLETED
-        CMD_INIT_POSE,
-        CMD_SEND_PHYSICS_SIMULATION_PARAMETERS,
-        CMD_SEND_DESIRED_STATE,//todo: reconsider naming, for example SET_JOINT_CONTROL_VARIABLE?
-        CMD_REQUEST_ACTUAL_STATE,
-        CMD_REQUEST_DEBUG_LINES,
+	CMD_LOAD_BULLET,
+	CMD_SAVE_BULLET,
+	CMD_LOAD_MJCF,
+    CMD_LOAD_BUNNY,
+	CMD_SEND_BULLET_DATA_STREAM,
+	CMD_CREATE_BOX_COLLISION_SHAPE,
+	CMD_CREATE_RIGID_BODY,
+	CMD_DELETE_RIGID_BODY,
+	CMD_CREATE_SENSOR,///enable or disable joint feedback for force/torque sensors
+	CMD_INIT_POSE,
+	CMD_SEND_PHYSICS_SIMULATION_PARAMETERS,
+	CMD_SEND_DESIRED_STATE,//todo: reconsider naming, for example SET_JOINT_CONTROL_VARIABLE?
+	CMD_REQUEST_ACTUAL_STATE,
+	CMD_REQUEST_DEBUG_LINES,
     CMD_REQUEST_BODY_INFO,
+	CMD_REQUEST_INTERNAL_DATA,
     CMD_STEP_FORWARD_SIMULATION,
     CMD_RESET_SIMULATION,
     CMD_PICK_BODY,
@@ -30,8 +33,15 @@ enum EnumSharedMemoryClientCommand
 	CMD_CALCULATE_INVERSE_DYNAMICS,
     CMD_CALCULATE_INVERSE_KINEMATICS,
     CMD_CALCULATE_JACOBIAN,
-    CMD_CREATE_JOINT,
+    CMD_USER_CONSTRAINT,
     CMD_REQUEST_CONTACT_POINT_INFORMATION,
+	CMD_REQUEST_AABB_OVERLAP,
+	CMD_SAVE_WORLD,
+	CMD_REQUEST_VISUAL_SHAPE_INFO,
+    CMD_UPDATE_VISUAL_SHAPE,
+    CMD_LOAD_TEXTURE,
+	CMD_USER_DEBUG_DRAW,
+
     //don't go beyond this command!
     CMD_MAX_CLIENT_COMMANDS,
     
@@ -49,6 +59,14 @@ enum EnumSharedMemoryServerStatus
         CMD_SDF_LOADING_FAILED,
         CMD_URDF_LOADING_COMPLETED,
         CMD_URDF_LOADING_FAILED,
+		CMD_BULLET_LOADING_COMPLETED,
+		CMD_BULLET_LOADING_FAILED,
+		CMD_BULLET_SAVING_COMPLETED,
+		CMD_BULLET_SAVING_FAILED,
+		CMD_MJCF_LOADING_COMPLETED,
+		CMD_MJCF_LOADING_FAILED,
+		CMD_REQUEST_INTERNAL_DATA_COMPLETED,
+		CMD_REQUEST_INTERNAL_DATA_FAILED,
         CMD_BULLET_DATA_STREAM_RECEIVED_COMPLETED,
         CMD_BULLET_DATA_STREAM_RECEIVED_FAILED,
         CMD_BOX_COLLISION_SHAPE_CREATION_COMPLETED,
@@ -72,8 +90,23 @@ enum EnumSharedMemoryServerStatus
         CMD_CALCULATED_JACOBIAN_FAILED,
 		CMD_CONTACT_POINT_INFORMATION_COMPLETED,
 		CMD_CONTACT_POINT_INFORMATION_FAILED,
+		CMD_REQUEST_AABB_OVERLAP_COMPLETED,
+		CMD_REQUEST_AABB_OVERLAP_FAILED,
 		CMD_CALCULATE_INVERSE_KINEMATICS_COMPLETED,
 		CMD_CALCULATE_INVERSE_KINEMATICS_FAILED,
+		CMD_SAVE_WORLD_COMPLETED,
+		CMD_SAVE_WORLD_FAILED,
+        CMD_VISUAL_SHAPE_INFO_COMPLETED,
+        CMD_VISUAL_SHAPE_INFO_FAILED,
+        CMD_VISUAL_SHAPE_UPDATE_COMPLETED,
+        CMD_VISUAL_SHAPE_UPDATE_FAILED,
+        CMD_LOAD_TEXTURE_COMPLETED,
+        CMD_LOAD_TEXTURE_FAILED,
+		CMD_USER_DEBUG_DRAW_COMPLETED,
+		CMD_USER_DEBUG_DRAW_FAILED,
+		CMD_USER_CONSTRAINT_COMPLETED,
+		CMD_USER_CONSTRAINT_FAILED,
+        //don't go beyond 'CMD_MAX_SERVER_COMMANDS!
         CMD_MAX_SERVER_COMMANDS
 };
 
@@ -98,6 +131,8 @@ enum
 enum JointType {
     eRevoluteType = 0,
     ePrismaticType = 1,
+    eFixedType = 2,
+	ePoint2PointType = 3,
 };
 
 struct b3JointInfo
@@ -116,6 +151,13 @@ struct b3JointInfo
     double m_jointAxis[3]; // joint axis in parent local frame
 };
 
+struct b3BodyInfo
+{
+	const char* m_baseName;
+};
+
+
+
 struct b3JointSensorState
 {
   double m_jointPosition;
@@ -130,6 +172,18 @@ struct b3DebugLines
     const float*  m_linesFrom;//float x,y,z times 'm_numDebugLines'.
     const float*  m_linesTo;//float x,y,z times 'm_numDebugLines'.
     const float*  m_linesColor;//float red,green,blue times 'm_numDebugLines'.
+};
+
+struct b3OverlappingObject
+{
+	int m_objectUniqueId;
+	int m_linkIndex;
+};
+
+struct b3AABBOverlapData
+{
+    int m_numOverlappingObjects;
+	struct b3OverlappingObject* m_overlappingObjects;
 };
 
 struct b3CameraImageData
@@ -166,11 +220,38 @@ struct b3ContactPointData
 //    double m_angularFrictionForce;
 };
 
+enum 
+{
+	CONTACT_QUERY_MODE_REPORT_EXISTING_CONTACT_POINTS = 0,
+	CONTACT_QUERY_MODE_COMPUTE_CLOSEST_POINTS = 1,
+};
+
+
 
 struct b3ContactInformation
 {
 	int m_numContactPoints;
 	struct b3ContactPointData* m_contactPointData;
+};
+
+#define VISUAL_SHAPE_MAX_PATH_LEN 128
+
+struct b3VisualShapeData
+{
+	int m_objectUniqueId;
+	int m_linkIndex;
+	int m_visualGeometryType;//box primitive, sphere primitive, triangle mesh
+	double m_dimensions[3];//meaning depends on m_visualGeometryType
+	char m_meshAssetFileName[VISUAL_SHAPE_MAX_PATH_LEN];
+	double m_localInertiaFrame[7];//pos[3], orn[4]
+	//todo: add more data if necessary (material color etc, although material can be in asset file .obj file)
+    double m_rgbaColor[4];
+};
+
+struct b3VisualShapeInformation
+{
+	int m_numVisualShapes;
+	struct b3VisualShapeData* m_visualShapeData;
 };
 
 ///b3LinkState provides extra information such as the Cartesian world coordinates

@@ -816,7 +816,7 @@ bool UrdfParser::parseLink(UrdfModel& model, UrdfLink& link, TiXmlElement *confi
 bool UrdfParser::parseJointLimits(UrdfJoint& joint, TiXmlElement* config, ErrorLogger* logger)
 {
 	joint.m_lowerLimit = 0.f;
-	joint.m_upperLimit = 0.f;
+	joint.m_upperLimit = -1.f;
 	joint.m_effortLimit = 0.f;
 	joint.m_velocityLimit = 0.f;
 	joint.m_jointDamping = 0.f;
@@ -1057,12 +1057,15 @@ bool UrdfParser::parseJoint(UrdfJoint& joint, TiXmlElement *config, ErrorLogger*
                 TiXmlElement *limit_xml = axis_xml->FirstChildElement("limit");
                 if (limit_xml)
                 {
-                    if (!parseJointLimits(joint, limit_xml,logger))
-                    {
-                        logger->reportError("Could not parse limit element for joint:");
-                        logger->reportError(joint.m_name.c_str());
-                        return false;
-                    }
+					if (joint.m_type != URDFContinuousJoint)
+					{
+						if (!parseJointLimits(joint, limit_xml,logger))
+						{
+							logger->reportError("Could not parse limit element for joint:");
+							logger->reportError(joint.m_name.c_str());
+							return false;
+						}
+					}
                 }
                 else if (joint.m_type == URDFRevoluteJoint)
                 {

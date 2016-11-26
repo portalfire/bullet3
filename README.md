@@ -2,18 +2,20 @@
 [![Travis Build Status](https://api.travis-ci.org/bulletphysics/bullet3.png?branch=master)](https://travis-ci.org/bulletphysics/bullet3)
 [![Appveyor Build status](https://ci.appveyor.com/api/projects/status/6sly9uxajr6xsstq)](https://ci.appveyor.com/project/erwincoumans/bullet3)
 
-# Bullet 2.x including pybullet and experimental Bullet 3 OpenCL.
+# Bullet Physics SDK
 
-This is the official repository of Bullet 2.x, moved from http://bullet.googlecode.com
-It includes the optional experimental Bullet 3 GPU pipeline.
+This is the official C++ source code repository of the Bullet Physics SDK: real-time collision detection and multi-physics simulation for VR, games, visual effects, robotics, machine learning etc.
 
-The Bullet 2 API will stay default and up-to-date while slowly moving to Bullet 3.
-The steps towards Bullet 3 are in a nutshell:
+New in Bullet 2.85: pybullet Python bindings, improved support for robotics and VR
+
+The Bullet 2 API will stay default and up-to-date while slowly moving to a new API.
+The steps towards a new API is in a nutshell:
 
 1. The old Bullet2 demos are being merged into the examples/ExampleBrowser
-2. A new Bullet 3 API is created
-3. All Bullet2 functionality is added to Bullet 3.
-4. The OpenCL examples in the ExampleBrowser can be enabled using --enable_experimental_opencl
+2. A new physics-engine agnostic C-API is created, see examples/SharedMemory/PhysicsClientC_API.h
+3. Python bindings in pybullet are on top of this C-API, see examples/pybullet
+4. A Virtual Reality sandbox using openvr for HTC Vive and Oculus Rift is available
+5. The OpenCL examples in the ExampleBrowser can be enabled using --enable_experimental_opencl
 
 You can still use svn or svn externals using the github git repository: use svn co https://github.com/bulletphysics/bullet3/trunk
 
@@ -27,9 +29,9 @@ Some optional demos require OpenGL 2 or OpenGL 3, there are some non-graphical d
 
 https://docs.google.com/document/d/1u9vyzPtrVoVhYqQOGNWUgjRbfwfCdIts_NzmvgiJ144/edit
 
-## Requirements for Bullet 3
+## Requirements for experimental OpenCL GPGPU support
 
-The entire collision detection and rigid body dynamics is executed on the GPU.
+The entire collision detection and rigid body dynamics can be executed on the GPU.
 
 A high-end desktop GPU, such as an AMD Radeon 7970 or NVIDIA GTX 680 or better.
 We succesfully tested the software under Windows, Linux and Mac OSX.
@@ -48,6 +50,18 @@ All source code files are licensed under the permissive zlib license
 **Windows**
 
 Click on build_visual_studio.bat and open build3/vs2010/0MySolution.sln
+
+**Windows Virtual Reality sandbox for HTC Vive and Oculus Rift**
+
+Click on build_visual_studio_vr_pybullet_double.bat and open build3/vs2010/0MySolution.sln
+Edit this batch file to choose where Python include/lib directories are located.
+Build and run the App_SharedMemoryPhysics_VR project, preferably in Release/optimized build.
+You can connect from Python pybullet to the sandbox using:
+
+```
+import pybullet as p
+p.connect(p.SHARED_MEMORY)
+```
 
 **Linux and Mac OSX gnu make**
 
@@ -80,9 +94,6 @@ You can just run it though a terminal/command prompt, or by clicking it.
 
 ```
 [--start_demo_name="Demo Name"]     Start with a selected demo  
-[--enable_pybullet]                 Build with pybullet Python bindings. See also examples/pybullet
-[--enable_openvr]                   Build with VR support for HTC Vive and Oculus Rift using OpenVR
-[--enable_experimental_opencl]      Enable some experimental OpenCL examples
 [--mp4=moviename.mp4]               Create a mp4 movie of the window, requires ffmpeg installed
 [--mouse_move_multiplier=0.400000]  Set the mouse move sensitivity
 [--mouse_wheel_multiplier=0.01]     Set the mouse wheel sensitivity
@@ -93,4 +104,4 @@ You can just run it though a terminal/command prompt, or by clicking it.
 You can use mouse picking to grab objects. When holding the ALT or CONTROL key, you have Maya style camera mouse controls.
 Press F1 to create a series of screenshots. Hit ESCAPE to exit the demo app.
 
-See docs folder for further information.
+Check out the docs folder and the Bullet physics forums for further information.

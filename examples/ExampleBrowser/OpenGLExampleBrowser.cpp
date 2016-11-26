@@ -134,9 +134,9 @@ int gSharedMemoryKey=-1;
 
 int gPreferredOpenCLDeviceIndex=-1;
 int gPreferredOpenCLPlatformIndex=-1;
-int gGpuArraySizeX=15;
-int gGpuArraySizeY=15;
-int gGpuArraySizeZ=15;
+int gGpuArraySizeX=45;
+int gGpuArraySizeY=55;
+int gGpuArraySizeZ=45;
 
 //#include <float.h>
 //unsigned int fp_control_state = _controlfp(_EM_INEXACT, _MCW_EM);
@@ -1087,7 +1087,7 @@ bool OpenGLExampleBrowser::requestedExit()
 
 void OpenGLExampleBrowser::update(float deltaTime)
 {
-
+		B3_PROFILE("OpenGLExampleBrowser::update");
 		assert(glGetError()==GL_NO_ERROR);
 		s_instancingRenderer->init();
         DrawGridData dg;
@@ -1139,9 +1139,11 @@ void OpenGLExampleBrowser::update(float deltaTime)
 				singleStepSimulation = false;
 				//printf("---------------------------------------------------\n");
 				//printf("Framecount = %d\n",frameCount);
-				
+				B3_PROFILE("sCurrentDemo->stepSimulation");
+
 				if (gFixedTimeStep>0)
 				{
+				
 					sCurrentDemo->stepSimulation(gFixedTimeStep);
 				} else
 				{
@@ -1165,9 +1167,9 @@ void OpenGLExampleBrowser::update(float deltaTime)
 				}
                 BT_PROFILE("Render Scene");
                 sCurrentDemo->renderScene();
-            }
+            } else
             {
-				
+				B3_PROFILE("physicsDebugDraw");
 				glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
                 sCurrentDemo->physicsDebugDraw(gDebugDrawFlags);
             }
@@ -1179,6 +1181,7 @@ void OpenGLExampleBrowser::update(float deltaTime)
 			
 			if (gui2 && s_guiHelper && s_guiHelper->getRenderInterface() && s_guiHelper->getRenderInterface()->getActiveCamera())
 			{
+				B3_PROFILE("setStatusBarMessage");
 				char msg[1024];
 				float camDist = s_guiHelper->getRenderInterface()->getActiveCamera()->getCameraDistance();
 				float pitch = s_guiHelper->getRenderInterface()->getActiveCamera()->getCameraPitch();
@@ -1194,6 +1197,7 @@ void OpenGLExampleBrowser::update(float deltaTime)
 		static int toggle = 1;
 		if (renderGui)
 		{
+			B3_PROFILE("renderGui");
 			//            if (!pauseSimulation)
 			//                processProfileData(s_profWindow,false);
 
@@ -1202,16 +1206,12 @@ void OpenGLExampleBrowser::update(float deltaTime)
 
 				saveOpenGLState(s_instancingRenderer->getScreenWidth(), s_instancingRenderer->getScreenHeight());
 			}
-			BT_PROFILE("Draw Gwen GUI");
+			
 			if (m_internalData->m_gui)
 			{
 				m_internalData->m_gui->draw(s_instancingRenderer->getScreenWidth(), s_instancingRenderer->getScreenHeight());
 			}
-			if (gui2)
-			{
-				gui2->draw(s_instancingRenderer->getScreenWidth(), s_instancingRenderer->getScreenHeight());
-			}
-
+			
             if (sUseOpenGL2)
             {
                 restoreOpenGLState();
@@ -1237,6 +1237,7 @@ void OpenGLExampleBrowser::update(float deltaTime)
 	
 		if (gui2)
 		{
+			B3_PROFILE("forceUpdateScrollBars");
 			gui2->forceUpdateScrollBars();
 		}
 

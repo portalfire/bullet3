@@ -1017,7 +1017,7 @@ static void	Init_Bunny(SoftDemo* pdemo)
 	psb->m_cfg.kDF			=	0.5;
 	psb->randomizeConstraints();
 	psb->scale(btVector3(6,6,6));
-	psb->setTotalMass(100,true);	
+	psb->setTotalMass(100,true);
 	pdemo->getSoftDynamicsWorld()->addSoftBody(psb);
 	pdemo->m_cutting=true;
 
@@ -2131,12 +2131,12 @@ void	SoftDemo::initPhysics()
 			for (int j=0;j<NUM_VERTS_Y-1;j++)
 			{
 				gGroundIndices[index++] = j*NUM_VERTS_X+i;
-				gGroundIndices[index++] = j*NUM_VERTS_X+i+1;
 				gGroundIndices[index++] = (j+1)*NUM_VERTS_X+i+1;
+				gGroundIndices[index++] = j*NUM_VERTS_X+i+1;;
 
 				gGroundIndices[index++] = j*NUM_VERTS_X+i;
-				gGroundIndices[index++] = (j+1)*NUM_VERTS_X+i+1;
 				gGroundIndices[index++] = (j+1)*NUM_VERTS_X+i;
+				gGroundIndices[index++] = (j+1)*NUM_VERTS_X+i+1;
 			}
 		}
 
@@ -2166,7 +2166,6 @@ void	SoftDemo::initPhysics()
 	cylinderCompound->addChildShape(localTransform,cylinderShape);
 
 	m_collisionShapes.push_back(cylinderCompound);
-
 
 	m_dispatcher=0;
 

@@ -31,9 +31,12 @@ btScalar btMultiBodyConstraintSolver::solveSingleIteration(int iteration, btColl
 	//solve featherstone non-contact constraints
 
 	//printf("m_multiBodyNonContactConstraints = %d\n",m_multiBodyNonContactConstraints.size());
+
 	for (int j=0;j<m_multiBodyNonContactConstraints.size();j++)
 	{
-		btMultiBodySolverConstraint& constraint = m_multiBodyNonContactConstraints[j];
+		int index = iteration&1? j : m_multiBodyNonContactConstraints.size()-1-j;
+
+		btMultiBodySolverConstraint& constraint = m_multiBodyNonContactConstraints[index];
 		
 		resolveSingleConstraintRowGeneric(constraint);
 		if(constraint.m_multiBodyA) 
@@ -1115,7 +1118,7 @@ static void applyJointFeedback(btMultiBodyJacobianData& data, const btMultiBodyS
 }
 #endif
 
-#include "Bullet3Common/b3Logging.h"
+
 void btMultiBodyConstraintSolver::writeBackSolverBodyToMultiBody(btMultiBodySolverConstraint& c, btScalar deltaTime)
 {
 #if 1 

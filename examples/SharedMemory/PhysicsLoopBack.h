@@ -38,6 +38,12 @@ public:
 
     virtual bool submitClientCommand(const struct SharedMemoryCommand& command);
 
+	virtual int getNumBodies() const;
+
+	virtual int getBodyUniqueId(int serialIndex) const;
+
+	virtual bool getBodyInfo(int bodyUniqueId, struct b3BodyInfo& info) const;
+
     virtual int getNumJoints(int bodyIndex) const;
 
     virtual bool getJointInfo(int bodyIndex, int jointIndex, struct b3JointInfo& info) const;
@@ -56,6 +62,9 @@ public:
 	
 	virtual void getCachedContactPointInformation(struct b3ContactInformation* contactPointData);
 
+	virtual void getCachedOverlappingObjects(struct b3AABBOverlapData* overlappingObjects);
+
+	virtual void getCachedVisualShapeInformation(struct b3VisualShapeInformation* visualShapesInfo);
 };
 
 #endif //PHYSICS_LOOP_BACK_H

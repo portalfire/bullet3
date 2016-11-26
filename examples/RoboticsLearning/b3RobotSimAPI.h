@@ -85,6 +85,7 @@ struct b3JointMotorArgs
 enum b3InverseKinematicsFlags
 {
 	B3_HAS_IK_TARGET_ORIENTATION=1,
+    B3_HAS_NULL_SPACE_VELOCITY=2,
 };
 
 struct b3RobotSimInverseKinematicArgs
@@ -93,15 +94,28 @@ struct b3RobotSimInverseKinematicArgs
 //	double* m_currentJointPositions;
 //	int m_numPositions;
 	double m_endEffectorTargetPosition[3];
-//	double m_endEffectorTargetOrientation[4];
+	double m_endEffectorTargetOrientation[4];
+    int m_endEffectorLinkIndex;
 	int m_flags;
+    int m_numDegreeOfFreedom;
+    b3AlignedObjectArray<double> m_lowerLimits;
+    b3AlignedObjectArray<double> m_upperLimits;
+    b3AlignedObjectArray<double> m_jointRanges;
+    b3AlignedObjectArray<double> m_restPoses;
 
 	b3RobotSimInverseKinematicArgs()
 		:m_bodyUniqueId(-1),
-//		m_currentJointPositions(0),
-//		m_numPositions(0),
+		m_endEffectorLinkIndex(-1),
 		m_flags(0)
 	{
+		m_endEffectorTargetPosition[0]=0;
+		m_endEffectorTargetPosition[1]=0;
+		m_endEffectorTargetPosition[2]=0;
+
+		m_endEffectorTargetOrientation[0]=0;
+		m_endEffectorTargetOrientation[1]=0;
+		m_endEffectorTargetOrientation[2]=0;
+		m_endEffectorTargetOrientation[3]=1;
 	}
 };
 
@@ -149,7 +163,9 @@ public:
     
     void getBodyJacobian(int bodyUniqueId, int linkIndex, const double* localPosition, const double* jointPositions, const double* jointVelocities, const double* jointAccelerations, double* linearJacobian, double* angularJacobian);
     
-    void getLinkState(int bodyUniqueId, int linkIndex, double* worldPosition);
+    void getLinkState(int bodyUniqueId, int linkIndex, double* worldPosition, double* worldOrientation);
+    
+    void loadBunny(double scale, double mass, double collisionMargin);
 };
 
 #endif //B3_ROBOT_SIM_API_H

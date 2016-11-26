@@ -7,9 +7,6 @@
 #include "PhysicsClient.h"
 #include "LinearMath/btVector3.h"
 
-///todo: the PhysicsClient API was designed with shared memory in mind, 
-///now it become more general we need to move out the shared memory specifics away
-///for example naming [disconnectSharedMemory -> disconnect] [ move setSharedMemoryKey to shared memory specific subclass ]
 ///PhysicsDirect executes the commands directly, without transporting them or having a separate server executing commands
 class PhysicsDirect : public PhysicsClient 
 {
@@ -23,11 +20,17 @@ protected:
 
     bool processContactPointData(const struct SharedMemoryCommand& orgCommand);
 
+	bool processOverlappingObjects(const struct SharedMemoryCommand& orgCommand);
+
+	bool processVisualShapeData(const struct SharedMemoryCommand& orgCommand);
+	
     void processBodyJointInfo(int bodyUniqueId, const struct SharedMemoryStatus& serverCmd);
     
+	void postProcessStatus(const struct SharedMemoryStatus& serverCmd);
+
 public:
 
-    PhysicsDirect();
+	PhysicsDirect(class PhysicsCommandProcessorInterface* physSdk);
     
     virtual ~PhysicsDirect();
 
@@ -49,6 +52,12 @@ public:
 
     virtual bool submitClientCommand(const struct SharedMemoryCommand& command);
 
+	virtual int getNumBodies() const;
+
+	virtual int getBodyUniqueId(int serialIndex) const;
+
+	virtual bool getBodyInfo(int bodyUniqueId, struct b3BodyInfo& info) const;
+
     virtual int getNumJoints(int bodyIndex) const;
 
     virtual bool getJointInfo(int bodyIndex, int jointIndex, struct b3JointInfo& info) const;
@@ -67,6 +76,11 @@ public:
 	virtual void getCachedCameraImage(b3CameraImageData* cameraData);
 
     virtual void getCachedContactPointInformation(struct b3ContactInformation* contactPointData);
+
+	virtual void getCachedOverlappingObjects(struct b3AABBOverlapData* overlappingObjects);
+
+	virtual void getCachedVisualShapeInformation(struct b3VisualShapeInformation* visualShapesInfo);
+	
 
 	//those 2 APIs are for internal use for visualization
 	virtual bool connect(struct GUIHelperInterface* guiHelper);

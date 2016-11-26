@@ -32,6 +32,9 @@ subject to the following restrictions:
 #include <iostream>
 #include <fstream>
 #include "../Importers/ImportURDFDemo/UrdfParser.h"
+#include "../SharedMemory/SharedMemoryPublic.h"//for b3VisualShapeData
+#include "../TinyRenderer/model.h"
+#include "../ThirdPartyLibs/stb_image/stb_image.h"
 
 
 enum MyFileType
@@ -60,21 +63,30 @@ struct TinyRendererVisualShapeConverterInternalData
 {
 	
     btHashMap<btHashPtr,TinyRendererObjectArray*> m_swRenderInstances;
+
+	btAlignedObjectArray<b3VisualShapeData> m_visualShapes;
     
    	int m_upAxis;
 	int m_swWidth;
 	int m_swHeight;
 	TGAImage m_rgbColorBuffer;
+    b3AlignedObjectArray<MyTexture2> m_textures;
 	b3AlignedObjectArray<float> m_depthBuffer;
 	b3AlignedObjectArray<int> m_segmentationMaskBuffer;
-	
+	btVector3 m_lightDirection;
+	bool m_hasLightDirection;
+    btVector3 m_lightColor;
+    bool m_hasLightColor;
 	SimpleCamera m_camera;
+	
 	
 	TinyRendererVisualShapeConverterInternalData()
 	:m_upAxis(2),
 	m_swWidth(START_WIDTH),
 	m_swHeight(START_HEIGHT),
-	m_rgbColorBuffer(START_WIDTH,START_HEIGHT,TGAImage::RGB)
+	m_rgbColorBuffer(START_WIDTH,START_HEIGHT,TGAImage::RGB),
+	m_hasLightDirection(false),
+    m_hasLightColor(false)
 	{
 	    m_depthBuffer.resize(m_swWidth*m_swHeight);
 	    m_segmentationMaskBuffer.resize(m_swWidth*m_swHeight,-1);
@@ -102,12 +114,26 @@ TinyRendererVisualShapeConverter::~TinyRendererVisualShapeConverter()
 	delete m_data;
 }
 	
+void TinyRendererVisualShapeConverter::setLightDirection(float x, float y, float z)
+{
+	m_data->m_lightDirection.setValue(x, y, z);
+	m_data->m_hasLightDirection = true;
+}
 
+void TinyRendererVisualShapeConverter::setLightColor(float x, float y, float z)
+{
+    m_data->m_lightColor.setValue(x, y, z);
+    m_data->m_hasLightColor = true;
+}
 
-
-void convertURDFToVisualShape(const UrdfVisual* visual, const char* urdfPathPrefix, const btTransform& visualTransform, btAlignedObjectArray<GLInstanceVertex>& verticesOut, btAlignedObjectArray<int>& indicesOut, btAlignedObjectArray<MyTexture2>& texturesOut)
+void convertURDFToVisualShape(const UrdfVisual* visual, const char* urdfPathPrefix, const btTransform& visualTransform, btAlignedObjectArray<GLInstanceVertex>& verticesOut, btAlignedObjectArray<int>& indicesOut, btAlignedObjectArray<MyTexture2>& texturesOut, b3VisualShapeData& visualShapeOut)
 {
 
+	visualShapeOut.m_visualGeometryType = visual->m_geometry.m_type;
+	visualShapeOut.m_dimensions[0] = 0;
+	visualShapeOut.m_dimensions[1] = 0;
+	visualShapeOut.m_dimensions[2] = 0;
+	visualShapeOut.m_meshAssetFileName[0] = 0;
 	
 	GLInstanceGraphicsShape* glmesh = 0;
 
@@ -119,6 +145,9 @@ void convertURDFToVisualShape(const UrdfVisual* visual, const char* urdfPathPref
 		{
 			btAlignedObjectArray<btVector3> vertices;
 		
+			visualShapeOut.m_dimensions[0] = visual->m_geometry.m_cylinderLength;
+			visualShapeOut.m_dimensions[1] = visual->m_geometry.m_cylinderRadius;
+			
 			//int numVerts = sizeof(barrel_vertices)/(9*sizeof(float));
 			int numSteps = 32;
 			for (int i = 0; i<numSteps; i++)
@@ -140,7 +169,10 @@ void convertURDFToVisualShape(const UrdfVisual* visual, const char* urdfPathPref
 		}
 		case URDF_GEOM_BOX:
 		{
-			
+			visualShapeOut.m_dimensions[0] = visual->m_geometry.m_boxSize[0];
+			visualShapeOut.m_dimensions[1] = visual->m_geometry.m_boxSize[1];
+			visualShapeOut.m_dimensions[2] = visual->m_geometry.m_boxSize[2];
+
 			btVector3 extents = visual->m_geometry.m_boxSize;
 			
 			btBoxShape* boxShape = new btBoxShape(extents*0.5f);
@@ -151,6 +183,8 @@ void convertURDFToVisualShape(const UrdfVisual* visual, const char* urdfPathPref
 		}
 		case URDF_GEOM_SPHERE:
 		{
+			visualShapeOut.m_dimensions[0] = visual->m_geometry.m_sphereRadius;
+			
 			btScalar radius = visual->m_geometry.m_sphereRadius;
 			btSphereShape* sphereShape = new btSphereShape(radius);
 			convexColShape = sphereShape;
@@ -200,6 +234,18 @@ void convertURDFToVisualShape(const UrdfVisual* visual, const char* urdfPathPref
 
 
 					sprintf(fullPath, "%s%s", urdfPathPrefix, filename);
+
+					visualShapeOut.m_dimensions[0] = visual->m_geometry.m_meshScale[0];
+					visualShapeOut.m_dimensions[1] = visual->m_geometry.m_meshScale[1];
+					visualShapeOut.m_dimensions[2] = visual->m_geometry.m_meshScale[2];
+
+					int sl = strlen(fullPath);
+					if (sl < (VISUAL_SHAPE_MAX_PATH_LEN-1))
+					{
+						memcpy(visualShapeOut.m_meshAssetFileName, fullPath, sl);
+						visualShapeOut.m_meshAssetFileName[sl] = 0;
+					}
+					
 					FILE* f = fopen(fullPath, "rb");
 					if (f)
 					{
@@ -443,7 +489,7 @@ void convertURDFToVisualShape(const UrdfVisual* visual, const char* urdfPathPref
 
 
 
-void TinyRendererVisualShapeConverter::convertVisualShapes(int linkIndex, const char* pathPrefix, const btTransform& localInertiaFrame, const UrdfModel& model, class btCollisionObject* colObj, int objectIndex)
+void TinyRendererVisualShapeConverter::convertVisualShapes(int linkIndex, const char* pathPrefix, const btTransform& localInertiaFrame, const UrdfModel& model, class btCollisionObject* colObj, int bodyUniqueId)
 {
     
 	
@@ -486,11 +532,27 @@ void TinyRendererVisualShapeConverter::convertVisualShapes(int linkIndex, const 
             btAssert(visualsPtr);
             TinyRendererObjectArray* visuals = *visualsPtr;
             
-			convertURDFToVisualShape(&vis, pathPrefix, localInertiaFrame.inverse()*childTrans, vertices, indices,textures);
+			b3VisualShapeData visualShape;
+			visualShape.m_objectUniqueId = bodyUniqueId;
+			visualShape.m_linkIndex = linkIndex;
+			visualShape.m_localInertiaFrame[0] = localInertiaFrame.getOrigin()[0];
+			visualShape.m_localInertiaFrame[1] = localInertiaFrame.getOrigin()[1];
+			visualShape.m_localInertiaFrame[2] = localInertiaFrame.getOrigin()[2];
+			visualShape.m_localInertiaFrame[3] = localInertiaFrame.getRotation()[0];
+			visualShape.m_localInertiaFrame[4] = localInertiaFrame.getRotation()[1];
+			visualShape.m_localInertiaFrame[5] = localInertiaFrame.getRotation()[2];
+			visualShape.m_localInertiaFrame[6] = localInertiaFrame.getRotation()[3];
+            visualShape.m_rgbaColor[0] = rgbaColor[0];
+            visualShape.m_rgbaColor[1] = rgbaColor[1];
+            visualShape.m_rgbaColor[2] = rgbaColor[2];
+            visualShape.m_rgbaColor[3] = rgbaColor[3];
+            
+			convertURDFToVisualShape(&vis, pathPrefix, localInertiaFrame.inverse()*childTrans, vertices, indices,textures, visualShape);
+			m_data->m_visualShapes.push_back(visualShape);
 
             if (vertices.size() && indices.size())
             {
-                TinyRenderObjectData* tinyObj = new TinyRenderObjectData(m_data->m_rgbColorBuffer,m_data->m_depthBuffer, &m_data->m_segmentationMaskBuffer, objectIndex);
+                TinyRenderObjectData* tinyObj = new TinyRenderObjectData(m_data->m_rgbColorBuffer,m_data->m_depthBuffer, &m_data->m_segmentationMaskBuffer, bodyUniqueId);
 				unsigned char* textureImage=0;
 				int textureWidth=0;
 				int textureHeight=0;
@@ -512,6 +574,64 @@ void TinyRendererVisualShapeConverter::convertVisualShapes(int linkIndex, const 
 		}
 	}
 }
+
+int TinyRendererVisualShapeConverter::getNumVisualShapes(int bodyUniqueId)
+{
+	int start = -1;
+	//find first one, then count how many
+	for (int i = 0; i < m_data->m_visualShapes.size(); i++)
+	{
+		if (m_data->m_visualShapes[i].m_objectUniqueId == bodyUniqueId)
+		{
+			start = i;
+			break;
+		}
+	}
+	int count = 0;
+
+	if (start >= 0)
+	{
+		for (int i = start; i < m_data->m_visualShapes.size(); i++)
+		{
+			if (m_data->m_visualShapes[i].m_objectUniqueId == bodyUniqueId)
+			{
+				count++;
+			}
+			else
+			{
+				//storage of each visual shape for a given body unique id assumed to be contiguous
+				break;
+			}
+		}
+	}
+	return count;
+}
+
+int TinyRendererVisualShapeConverter::getVisualShapesData(int bodyUniqueId, int shapeIndex, struct b3VisualShapeData* shapeData)
+{
+	int start = -1;
+	//find first one, then count how many
+	for (int i = 0; i < m_data->m_visualShapes.size(); i++)
+	{
+		if (m_data->m_visualShapes[i].m_objectUniqueId == bodyUniqueId)
+		{
+			start = i;
+			break;
+		}
+	}
+	int count = 0;
+
+	if (start >= 0)
+	{
+		if (start + shapeIndex < m_data->m_visualShapes.size())
+		{
+			*shapeData = m_data->m_visualShapes[start + shapeIndex];
+			return 1;
+		}
+	}
+	return 0;
+}
+
 
 void TinyRendererVisualShapeConverter::setUpAxis(int axis)
 {
@@ -572,18 +692,31 @@ void TinyRendererVisualShapeConverter::render(const float viewMat[16], const flo
     
     
     btVector3 lightDirWorld(-5,200,-40);
-    switch (m_data->m_upAxis)
-    {
-    case 1:
-            lightDirWorld = btVector3(-50.f,100,30);
-        break;
-    case 2:
-            lightDirWorld = btVector3(-50.f,30,100);
-            break;
-    default:{}
-    };
+	if (m_data->m_hasLightDirection)
+	{
+		lightDirWorld = m_data->m_lightDirection;
+	}
+	else
+	{
+		switch (m_data->m_upAxis)
+		{
+		case 1:
+			lightDirWorld = btVector3(-50.f, 100, 30);
+			break;
+		case 2:
+			lightDirWorld = btVector3(-50.f, 30, 100);
+			break;
+		default: {}
+		};
+	}
     
     lightDirWorld.normalize();
+    
+    btVector3 lightColor(1.0,1.0,1.0);
+    if (m_data->m_hasLightColor)
+    {
+        lightColor = m_data->m_lightColor;
+    }
     
   //  printf("num m_swRenderInstances = %d\n", m_data->m_swRenderInstances.size());
     for (int i=0;i<m_data->m_swRenderInstances.size();i++)
@@ -618,6 +751,7 @@ void TinyRendererVisualShapeConverter::render(const float viewMat[16], const flo
                     renderObj->m_viewMatrix[i][j] = viewMat[i+4*j];
                     renderObj->m_localScaling = colObj->getCollisionShape()->getLocalScaling();
                     renderObj->m_lightDirWorld = lightDirWorld;
+                    renderObj->m_lightColor = lightColor;
                 }
             }
             TinyRenderer::renderObject(*renderObj);
@@ -729,3 +863,56 @@ void TinyRendererVisualShapeConverter::resetAll()
 	m_data->m_swRenderInstances.clear();
 }
 
+void TinyRendererVisualShapeConverter::activateShapeTexture(int shapeUniqueId, int textureUniqueId)
+{
+    btAssert(textureUniqueId < m_data->m_textures.size());
+    TinyRendererObjectArray** ptrptr = m_data->m_swRenderInstances.getAtIndex(shapeUniqueId);
+    if (ptrptr && *ptrptr)
+    {
+        TinyRendererObjectArray* ptr = *ptrptr;
+        ptr->m_renderObjects[0]->m_model->setDiffuseTextureFromData(m_data->m_textures[textureUniqueId].textureData,m_data->m_textures[textureUniqueId].m_width,m_data->m_textures[textureUniqueId].m_height);
+    }
+}
+
+void TinyRendererVisualShapeConverter::activateShapeTexture(int objectUniqueId, int jointIndex, int shapeIndex, int textureUniqueId)
+{
+    int start = -1;
+    for (int i = 0; i < m_data->m_visualShapes.size(); i++)
+    {
+        if (m_data->m_visualShapes[i].m_objectUniqueId == objectUniqueId && m_data->m_visualShapes[i].m_linkIndex == jointIndex)
+        {
+            start = i;
+            break;
+        }
+    }
+    
+    if (start >= 0)
+    {
+        if (start + shapeIndex < m_data->m_visualShapes.size())
+        {
+            activateShapeTexture(start + shapeIndex, textureUniqueId);
+        }
+    }
+}
+
+int TinyRendererVisualShapeConverter::registerTexture(unsigned char* texels, int width, int height)
+{
+    MyTexture2 texData;
+    texData.m_width = width;
+    texData.m_height = height;
+    texData.textureData = texels;
+    m_data->m_textures.push_back(texData);
+    return m_data->m_textures.size()-1;
+}
+
+int TinyRendererVisualShapeConverter::loadTextureFile(const char* filename)
+{
+    int width,height,n;
+    unsigned char* image=0;
+    image = stbi_load(filename, &width, &height, &n, 3);
+    if (image && (width>=0) && (height>=0))
+    {
+        return registerTexture(image, width, height);
+    }
+    return -1;
+}
